@@ -5,50 +5,47 @@ import shutil
 import unicodedata
 import sys
 
+#Fuction that return a list of the urls of the images in a chapter
 def ListPages(url):
-
     main_url=url_manga+str(url)
-    #print (main_url)
-
+ 
     req=requests.get(url)
 
     statusCode=req.status_code
     if statusCode==200:
-        #Pasar el contenido HTML de la web a un objeto BeautifulSoup()
         soup=BeautifulSoup(req.text, "html.parser")
 
-        #lista url paginas
-        paginas=soup.find('div',{'id':'selectpage'})
-        options = paginas.find_all('option')
+        #list of each page where there are the images of the chapter (but there are not the final url)
+        pages=soup.find('div',{'id':'selectpage'})
+        options = pages.find_all('option')
+
         urls_pages=list(map(lambda option: url_manga+option['value'],options))
 
         return list(map(ListImg,urls_pages))
 
     else:
-        #print ("Status Code %d en %s" %(statusCode,name))
-        print('Error %d Lista Paginas' % (statusCode))
+        print('Error %d Page List' % (statusCode))
         return None
 
+
+#Fuction that return  the url of a page's images
 def ListImg(url):
     req=requests.get(url)
 
     statusCode=req.status_code
     if statusCode==200:
         soup=BeautifulSoup(req.text, "html.parser")
-
         img_url=soup.find('div',{'id':'imgholder'}).find('img')
         return img_url['src']
 
-
     else:
-        #print ("Status Code %d en %s" %(statusCode,name))
-        print ('Error %d con la url de la imagen' %(statusCode))
+        print ('Error %d in the image url' %(statusCode))
         return None
 
 
+#Fuction that creates a folder
 def CreateFolder(name,dir="./mangas",format='%3d'):
     if type(name) is int:
-        #print ('%04d' % (name))
         path=os.path.join(dir,format % (name))
     else: path = os.path.join(dir,name)
 
@@ -56,13 +53,14 @@ def CreateFolder(name,dir="./mangas",format='%3d'):
         os.rmdir(path)
     except OSError as error:
         pass
+
     try:
         os.mkdir(path)
     except OSError as error:
         print(error)
 
 
-    
+ #Fuction that download image of a url  
 def DownloadImage(url,name):
     # Open the url image, set stream to True, this will return the stream content
     resp=requests.get(url, stream=True)
@@ -79,163 +77,148 @@ def DownloadImage(url,name):
     del resp
 
 
-def ListaCapitulos(url):
-    #Lista capitulos
-    list_capitulos=[]
+#Fuction that creates a list of urls of each chapter
+def ListChapters(url):
+    list_chapters=[]
 
-    #Peticion a la web
     req = requests.get(url)
 
-    #Comprobacion de que la peticion devuelve un Status Code = 200 (exito)
-    # Si empieza por 4 o 5 significa que ha habido un error
     statusCode=req.status_code
     if statusCode==200:
-        #Pasar el contenido HTML de la web a un objeto BeautifulSoup()
         soup=BeautifulSoup(req.text, "html.parser")
 
-        #Obtener lista de capitulos
-        tabla=soup.find('table',{'id':'listing'})
-        capitulos=tabla.find_all('tr')
+        #Get a chapters list
+        table=soup.find('table',{'id':'listing'})
+        chapters=table.find_all('tr')
 
-        #Eliminar table_head (no capitulo) de la lista
-        del capitulos[0]
+        #Eliminate table_head (no chapter) of the list
+        del chapters[0]
 
-        #Recorrer todas las entradas para extraer el titulo
-        for i,capitulo in enumerate(capitulos,1):
-            #Con el métdo "getText()" devuelve el HTML
-            href=capitulo.find('a', href=True)
-            url_capitulo=url_manga+str(href['href'])
+        #Go through all the entries to extract the title
+        for i,chapter in enumerate(chapters,1):
+            href=chapter.find('a', href=True)
+            url_chapter=url_manga+str(href['href'])
+            list_chapters.append(url_chapter)
 
-            list_capitulos.append(url_capitulo)
-
-        return list_capitulos
+        return list_chapters
             
     else:
-        #print ("Status Code %d" % statusCode)
-        print ('Error al buscar el manga')
-        return list_capitulos
+        print ('Error searching for manga name')
+        return list_chapters
 
-def Descargar_capitulos_rango(capitulos,n,format):
-    print ('Preparando descarga... Espere')
 
-    #Recorrer todas las entradas para extraer el titulo
-    for i,capitulo in enumerate(capitulos,n):
+#Fuction that downloads chapters
+def Download_chapters_Range(chapters,n,format):
+    print ('Downloading... ')
+    
+    #Check if mangas folder exists
+    if not os.path.isdir('./mangas'):
+        CreateFolder('mangas','./')
+        print ('\tmangas folder created')
 
-        #Crear carpeta del capitulo
+    #Make folder of the manga
+    if not os.path.isdir('./mangas/'+name_manga_folder):
+        CreateFolder(name_manga_folder)
+        print('\t%s folder created'%(name_manga_folder))
+    
+    #Begining download
+    for i,chapter in enumerate(chapters,n):
+        #Create chapter folder
         CreateFolder(i,'./mangas/'+name_manga_folder,format)
 
-        #Lista de las urls de las imagenes de cada capitulo
-        urls_capitulos=ListPages(capitulo)
-        format_img= '%03d' if len(urls_capitulos)>99 else '%02d'
+        #List of the image urls of each chapter
+        chapter_urls=ListPages(chapter)
+        format_img= '%03d' if len(chapter_urls)>99 else '%02d'
 
-        for j,url_capitulo in enumerate(urls_capitulos,1):
-            
+        #Download images
+        for j,chapter_url in enumerate(chapter_urls,1):          
             dir='./mangas/'+name_manga_folder+'/'+format % (i)+'/'+format_img % (j)
-
-            #print (dir)
-            #print (url_capitulo)
-            DownloadImage(url_capitulo,dir)
+            DownloadImage(chapter_url,dir)
             
-        print('\tCapitulo %d descargado'%(i))
+        print('\tChapter %d downloaded'%(i))
+
 
 
 #------------------------------------------
 #-------Main Web Scrapping-----------------
 #------------------------------------------
 
-#anime='OnePiece'
 url_manga = 'http://www.mangareader.net'
-#url=url_manga+'/one-piece'
 
+#Greeting
+print ('Welcom to Web Scrapping \nThis program downloads manga from mangareader.com')
 
-#Bienvenida
-print ('Bienvenido a Web Scrapping \nEste programa descarga mangas de la página MangaReader')
-
-#Bucle por si se introduce mal el nombre del manga
+#Loop if manga name is incorrect
 len_manga=0
 counter=False
 while len_manga is 0:
 
-    #Opción cerrar programa
-    if counter is True:
-        
-        finish=input ('¿Finalizar Programa? (S/N): ')
+    #Choose exit program
+    if counter is True:    
+        finish=input ('Finish program? (Y/N): ')
 
         finish=finish.lower()
-        if finish =='s':
+        if finish =='y':
             sys.exit()
 
     counter=True
             
-    #print ('\n Indica el manga que desea descargar')
-    name_manga= input('\nIndica el manga:')
+    name_manga= input('Manga\'s name:')
 
-    #Editar entrada manga
-    name_manga= name_manga.lower()  #Minusculas
-    name_manga=name_manga.strip()   #Eliminar espacios en blanco del princio y final
+    #Edit manga's name and manga's folder name
+    name_manga= name_manga.lower()  #Lowercase
+    name_manga=name_manga.strip()   #Remove spaces at the beginning and the end
 
     name_manga_folder=name_manga.title()
     name_manga_folder="_".join(name_manga_folder.split())
 
-    name_manga="-".join(name_manga.split()) #Sustituir varios espacios en blanco por uno solo
+    name_manga="-".join(name_manga.split()) #Change many spaces by dash
 
-    # print('Ha seleccionado:' + str(name_manga))
+    #Calculate list of chapters
+    list_chapters=ListChapters(url_manga+'/'+name_manga)
+    len_manga=len(list_chapters)
 
-    #Calcular lista de capitulos
-    lista_caps=ListaCapitulos(url_manga+'/'+name_manga)
-    len_manga=len(lista_caps)
-
-#Formato nombre de la carpeta de los capitulos
-#format_caps='%02d' if len_manga<100 else format_caps='%03d' if len_manga<1000 else fromat='%04d' 
-
+#Format of the chapter's folder name
 if len_manga<100:
-    format_caps='%02d'
+    format_chapter='%02d'
 elif len_manga<1000:
-    format_caps='%03d'
-else: fromat='%04d'
+    format_chapter='%03d'
+else: format_chapter='%04d'
 
+option=None
 
-#Comprobación de si existe la carpeta mangas
-if not os.path.isdir('./mangas'):
-    CreateFolder('mangas','./')
-    print ('Carpeta mangas creada')
+#Select chapter to download
+print ('\nThere are %d chapters' % (len_manga))
+print ('Choose one of the next options to download:\n A: All\n B: The First\n C: The Lastest\n D: Range\n E: Choose a chapter\n F: Nothing\n')
 
-#Crear carpeta del manga seleccionado
-if not os.path.isdir('./mangas/'+name_manga_folder):
-    CreateFolder(name_manga_folder)
-    print('Carpeta %s creada'%(name_manga_folder))
+counter=False
+while option is None:
+    if counter is True:
+        print('Try again')
 
-opcion=None
+    option=input('Option: ')
 
-#Seleccionar capitulos a descargar
-print ('\nHay %d capitulos en total' % (len_manga))
-print ('Indica una de las siguientes opciones de descarga:\n A: Todos\n B: Primero\n C: Ultimo\n D: Rango\n E: Elegir capitulo\n')
+    option=option.lower()
 
-counter2=False
-while opcion is None:
-    if counter2 is True:
-        print('Volver a intentar')
-
-    opcion=input('Opcion: ')
-
-    opcion=opcion.lower()
-    #print (opcion)
-
-    #Descargar capitulos
-    if opcion=='a' or opcion=='1':
-        Descargar_capitulos_rango(lista_caps,1,format_caps)
-    elif  opcion=='b' or opcion=='2':
-        Descargar_capitulos_rango([lista_caps[0]],1,format_caps)
-    elif opcion=='c'or opcion=='3':
-        Descargar_capitulos_rango([lista_caps[len_manga-1]],len_manga,format_caps)
-    elif opcion=='d'or opcion=='4':
-        print ('Descargar:')
-        inicio=input(' Del capitulo (numero): ')
-        fin=input(' Al capitulo (numero): ')
-        Descargar_capitulos_rango(lista_caps[int(inicio)-1:int(fin)],int(inicio),format_caps)
-    elif opcion=='e'or opcion=='5':
-        eleccion=input('Capitulo a descargar (numero): ')
-        Descargar_capitulos_rango([lista_caps[int(eleccion)-1]],int(eleccion),format_caps)
+    #Download chapters
+    if option=='a' or option=='1':
+        Download_chapters_Range(list_chapters,1,format_chapter)
+    elif  option=='b' or option=='2':
+        Download_chapters_Range([list_chapters[0]],1,format_chapter)
+    elif option=='c'or option=='3':
+        Download_chapters_Range([list_chapters[len_manga-1]],len_manga,format_chapter)
+    elif option=='d'or option=='4':
+        print ('Download:')
+        start=input(' From chapter (number): ')
+        end=input(' To chapter (number): ')
+        Download_chapters_Range(list_chapters[int(start)-1:int(end)],int(start),format_chapter)
+    elif option=='e'or option=='5':
+        choise=input('Chapter to download (number): ')
+        Download_chapters_Range([list_chapters[int(choise)-1]],int(choise),format_chapter)
+    elif option=='f'or option=='6':
+        pass
     else: 
-        opcion=None
-        counter2=True
+        option=None
+        counter=True
+
+print ('Finish! Goodbye :)')
